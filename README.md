@@ -64,11 +64,11 @@ Use the Register link in the app. You can then log in.
 The database starts empty; products are not seeded automatically. After signing in, open **Medicine inventory → Add medicine** to enter your own inventory. Expired products remain visible for stock management but are blocked at checkout.
 
 ## Deployment
-The GitHub repository contains source code; it is not itself a live website. For a live deployment:
+The GitHub repository contains source code; it is not itself a live website. To deploy the frontend and API together on Render:
 
-1. Create a MongoDB Atlas database and use its connection string as the backend `MONGO_URI`.
-2. Deploy `server` to a Node.js host with `NODE_ENV=production`, a strong random `JWT_SECRET`, and `CLIENT_ORIGIN` set to the exact public frontend origin.
-3. Deploy `client` to a static host with `VITE_API_URL` set to the deployed backend URL ending in `/api`, then build with `npm run build`.
+1. Create a MongoDB Atlas database, add a database user, and allow connections from your Render service. Copy the Atlas connection string, replacing its placeholders with your database username and password.
+2. In Render, choose **New → Blueprint**, connect this GitHub repository, and select `render.yaml`. Set `MONGO_URI` to the Atlas connection string when prompted. Render generates `JWT_SECRET` automatically.
+3. Wait for the service health check to pass, then open its `onrender.com` URL. The frontend and API share the same origin; the production frontend calls `/api`.
 4. Register an account on the deployed site and add products to that database. Local products do not automatically appear in the hosted database.
 
 Never commit `.env` files or share database connection strings or JWT secrets. Keep this educational project separate from real patient care and regulated pharmacy workflows.

@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import authRoutes from './routes/auth.js';
 import medicineRoutes from './routes/medicines.js';
 import salesRoutes from './routes/sales.js';
@@ -24,6 +26,17 @@ app.use('/api/auth', authRoutes);
 app.use('/api/medicines', medicineRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+
+if (process.env.NODE_ENV === 'production') {
+  const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/dist');
+  app.use(express.static(clientDist));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(clientDist, 'index.html'), (err) => {
+      if (err) next(err);
+    });
+  });
+}
 
 app.use((err, _req, res, _next) => {
   console.error(err);
