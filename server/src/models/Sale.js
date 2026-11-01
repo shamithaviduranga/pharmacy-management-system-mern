@@ -12,4 +12,6 @@ const saleSchema = new mongoose.Schema({
   soldBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
 }, { timestamps: true });
 
+saleSchema.index({ createdAt: -1 });
+
 export default mongoose.model('Sale', saleSchema);

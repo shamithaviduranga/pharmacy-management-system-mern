@@ -5,15 +5,18 @@ import auth from '../middleware/auth.js';
 const router = Router();
 router.use(auth);
 
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 router.get('/', async (req, res, next) => {
   try {
     const { search = '', lowStock } = req.query;
-    const filter = search ? {
+    const query = typeof search === 'string' ? search.trim().slice(0, 100) : '';
+    const filter = query ? {
       $or: [
-        { name: { $regex: search, $options: 'i' } },
-        { genericName: { $regex: search, $options: 'i' } },
-        { category: { $regex: search, $options: 'i' } },
-        { batchNumber: { $regex: search, $options: 'i' } }
+        { name: { $regex: escapeRegex(query), $options: 'i' } },
+        { genericName: { $regex: escapeRegex(query), $options: 'i' } },
+        { category: { $regex: escapeRegex(query), $options: 'i' } },
+        { batchNumber: { $regex: escapeRegex(query), $options: 'i' } }
       ]
     } : {};
     let medicines = await Medicine.find(filter).sort({ name: 1 });
@@ -31,7 +34,11 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const medicine = await Medicine.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    const medicine = await Medicine.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+      strict: 'throw'
+    });
     if (!medicine) return res.status(404).json({ message: 'Medicine not found.' });
     res.json(medicine);
   } catch (err) { next(err); }

@@ -13,7 +13,14 @@ const makeToken = (user) => jwt.sign(
 router.post('/register', async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
-    if (!name?.trim() || !email?.trim() || !password || password.length < 8) {
+    if (
+      typeof name !== 'string' ||
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !name.trim() ||
+      !email.trim() ||
+      password.length < 8
+    ) {
       return res.status(400).json({ message: 'Name, email, and password (at least 8 characters) are required.' });
     }
     const exists = await User.findOne({ email: email.toLowerCase().trim() });
@@ -29,8 +36,11 @@ router.post('/register', async (req, res, next) => {
 router.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email: email?.toLowerCase().trim() });
-    if (!user || !await bcrypt.compare(password || '', user.passwordHash)) {
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ message: 'Enter your email and password.' });
+    }
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user || !await bcrypt.compare(password, user.passwordHash)) {
       return res.status(401).json({ message: 'Incorrect email or password.' });
     }
     res.json({ token: makeToken(user), user: { id: user._id, name: user.name, email: user.email } });

@@ -60,6 +60,19 @@ Open the Vite URL printed in the terminal, normally `http://localhost:5173`.
 ### 4. Create an account
 Use the Register link in the app. You can then log in.
 
+### 5. Add products
+The database starts empty; products are not seeded automatically. After signing in, open **Medicine inventory → Add medicine** to enter your own inventory. Expired products remain visible for stock management but are blocked at checkout.
+
+## Deployment
+The GitHub repository contains source code; it is not itself a live website. For a live deployment:
+
+1. Create a MongoDB Atlas database and use its connection string as the backend `MONGO_URI`.
+2. Deploy `server` to a Node.js host with `NODE_ENV=production`, a strong random `JWT_SECRET`, and `CLIENT_ORIGIN` set to the exact public frontend origin.
+3. Deploy `client` to a static host with `VITE_API_URL` set to the deployed backend URL ending in `/api`, then build with `npm run build`.
+4. Register an account on the deployed site and add products to that database. Local products do not automatically appear in the hosted database.
+
+Never commit `.env` files or share database connection strings or JWT secrets. Keep this educational project separate from real patient care and regulated pharmacy workflows.
+
 ## Project structure
 ```text
 pharmacy-management-mern/

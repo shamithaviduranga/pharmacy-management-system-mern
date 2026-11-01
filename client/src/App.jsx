@@ -4,7 +4,13 @@ import { Activity, LayoutDashboard, Pill, ShoppingCart, ClipboardList, LogOut, P
 import api from './api';
 
 const money = (n) => new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR', maximumFractionDigits: 2 }).format(Number(n || 0));
-const dateText = (d) => d ? new Date(d).toLocaleDateString() : '—';
+const dateText = (d) => d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString() : '—';
+const todayText = () => {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 10);
+};
+const isExpired = (expiryDate) => Boolean(expiryDate && expiryDate.slice(0, 10) < todayText());
 
 function AuthPage({ onLogin }) {
   const [mode, setMode] = useState('login');
@@ -83,7 +89,8 @@ const emptyMedicine = {name:'',genericName:'',category:'General',batchNumber:'',
 function Medicines() {
   const [items,setItems] = useState([]); const [search,setSearch] = useState(''); const [modal,setModal] = useState(false);
   const [editing,setEditing] = useState(null); const [form,setForm] = useState(emptyMedicine); const [error,setError] = useState(''); const [busy,setBusy] = useState(false);
-  const load = async()=>{try{const {data}=await api.get('/medicines',{params:{search}});setItems(data);setError('');}catch(e){setError(e.response?.data?.message||'Unable to load medicines.');}};
+  const [loading,setLoading] = useState(true);
+  const load = async()=>{setLoading(true);try{const {data}=await api.get('/medicines',{params:{search}});setItems(data);setError('');}catch(e){setError(e.response?.data?.message||'Unable to load medicines.');}finally{setLoading(false);}};
   useEffect(()=>{const t=setTimeout(load,250);return()=>clearTimeout(t);},[search]);
   const openAdd=()=>{setEditing(null);setForm(emptyMedicine);setError('');setModal(true);};
   const openEdit=(m)=>{setEditing(m._id);setForm({...m,expiryDate:m.expiryDate?.slice(0,10),quantity:String(m.quantity),purchasePrice:String(m.purchasePrice),sellingPrice:String(m.sellingPrice)});setError('');setModal(true);};
@@ -93,8 +100,9 @@ function Medicines() {
     {error && !modal && <div className="alert error">{error}</div>}
     <section className="panel"><div className="inventory-toolbar"><div className="searchbox"><Search size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by medicine, generic name, batch…"/></div><span className="count-label">{items.length} products</span></div>
       <div className="table-wrap"><table><thead><tr><th>Medicine</th><th>Category</th><th>Batch no.</th><th>Expiry</th><th>Stock</th><th>Sell price</th><th>Actions</th></tr></thead><tbody>
-      {items.map(m=><tr key={m._id}><td><div className="medicine-cell"><span className="medicine-icon"><Pill size={17}/></span><span><strong>{m.name}</strong><small>{m.genericName||'Generic name not set'}</small></span></div></td><td>{m.category}</td><td className="mono">{m.batchNumber||'—'}</td><td><span className={new Date(m.expiryDate)<new Date()?'danger-text':''}>{dateText(m.expiryDate)}</span></td><td><span className={`stock-badge ${m.quantity<=m.reorderLevel?'low':''}`}>{m.quantity} units</span></td><td className="strong">{money(m.sellingPrice)}</td><td><div className="row-actions"><button className="icon-button" title="Edit" onClick={()=>openEdit(m)}><Pencil size={16}/></button><button className="icon-button danger-hover" title="Delete" onClick={()=>remove(m)}><Trash2 size={16}/></button></div></td></tr>)}
-      {!items.length&&<tr><td colSpan="7"><div className="table-empty">{search?'No medicines match your search.':'No medicines yet. Add your first product to get started.'}</div></td></tr>}
+      {items.map(m=>{const expired=isExpired(m.expiryDate);return <tr key={m._id}><td><div className="medicine-cell"><span className="medicine-icon"><Pill size={17}/></span><span><strong>{m.name}</strong><small>{m.genericName||'Generic name not set'}</small></span></div></td><td>{m.category}</td><td className="mono">{m.batchNumber||'—'}</td><td><span className={expired?'danger-text':''}>{dateText(m.expiryDate)}</span>{expired&&<small className="expiry-warning">Expired — not for sale</small>}</td><td><span className={`stock-badge ${m.quantity<=m.reorderLevel?'low':''}`}>{m.quantity} units</span></td><td className="strong">{money(m.sellingPrice)}</td><td><div className="row-actions"><button className="icon-button" title={`Edit ${m.name}`} aria-label={`Edit ${m.name}`} onClick={()=>openEdit(m)}><Pencil size={16}/></button><button className="icon-button danger-hover" title={`Delete ${m.name}`} aria-label={`Delete ${m.name}`} onClick={()=>remove(m)}><Trash2 size={16}/></button></div></td></tr>})}
+      {loading&&<tr><td colSpan="7"><div className="table-empty">Loading inventory…</div></td></tr>}
+      {!loading&&!items.length&&<tr><td colSpan="7"><div className="table-empty">{search?'No medicines match your search.':'No medicines yet. Add your first product to get started.'}</div></td></tr>}
       </tbody></table></div>
     </section>
     {modal&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setModal(false)}}><div className="modal"><div className="modal-heading"><div><p className="eyebrow">{editing?'UPDATE ITEM':'NEW PRODUCT'}</p><h2>{editing?'Edit medicine':'Add medicine'}</h2></div><button className="icon-button" onClick={()=>setModal(false)}><X/></button></div>
@@ -115,10 +123,11 @@ function NewSale() {
   useEffect(()=>{api.get('/medicines').then(r=>setMedicines(r.data)).catch(()=>setError('Unable to load inventory.'));},[]);
   const add=()=>{setError('');const m=medicines.find(x=>x._id===selected);if(!m)return setError('Choose a medicine first.');if(!Number.isInteger(Number(qty))||Number(qty)<1)return setError('Enter a valid quantity.');const existing=cart.find(x=>x._id===m._id);const nextQty=Number(qty)+(existing?.quantity||0);if(nextQty>m.quantity)return setError(`Only ${m.quantity} units of ${m.name} are available.`);setCart(existing?cart.map(x=>x._id===m._id?{...x,quantity:nextQty}:x):[...cart,{...m,quantity:Number(qty)}]);setQty(1);setSelected('');};
   const total=cart.reduce((sum,m)=>sum+m.quantity*m.sellingPrice,0);
+  const availableMedicines=medicines.filter(m=>m.quantity>0&&!isExpired(m.expiryDate));
   const checkout=async()=>{setBusy(true);setError('');setSuccess('');try{const {data}=await api.post('/sales',{items:cart.map(m=>({medicineId:m._id,quantity:m.quantity}))});setSuccess(`Sale #${data._id.slice(-6).toUpperCase()} recorded successfully.`);setCart([]);const res=await api.get('/medicines');setMedicines(res.data);}catch(e){setError(e.response?.data?.message||'Could not complete sale.');}finally{setBusy(false);}};
   return <><PageHeading eyebrow="POINT OF SALE" title="New sale" subtitle="Select items and quantities to record a transaction."/>
     {error&&<div className="alert error">{error}</div>}{success&&<div className="alert success">{success}</div>}
-    <div className="sale-layout"><section className="panel"><div className="panel-heading"><div><h2>Add items</h2><p className="muted">Choose from available inventory</p></div></div><div className="add-to-cart"><label className="grow">Medicine<select value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Select medicine…</option>{medicines.filter(m=>m.quantity>0).map(m=><option key={m._id} value={m._id}>{m.name} — {m.quantity} in stock</option>)}</select></label><label className="qty-label">Qty<input type="number" min="1" value={qty} onChange={e=>setQty(e.target.value)}/></label><button className="btn primary add-btn" onClick={add}><Plus size={17}/> Add</button></div>
+    <div className="sale-layout"><section className="panel"><div className="panel-heading"><div><h2>Add items</h2><p className="muted">Choose from available inventory</p></div></div><div className="add-to-cart"><label className="grow">Medicine<select value={selected} onChange={e=>setSelected(e.target.value)}><option value="">{availableMedicines.length?'Select medicine…':'No unexpired stock available'}</option>{availableMedicines.map(m=><option key={m._id} value={m._id}>{m.name} — {m.quantity} in stock</option>)}</select></label><label className="qty-label">Qty<input type="number" min="1" value={qty} onChange={e=>setQty(e.target.value)}/></label><button className="btn primary add-btn" onClick={add}><Plus size={17}/> Add</button></div>
       <div className="table-wrap"><table><thead><tr><th>Item</th><th>Unit price</th><th>Quantity</th><th className="right">Subtotal</th><th></th></tr></thead><tbody>{cart.map(m=><tr key={m._id}><td><strong>{m.name}</strong></td><td>{money(m.sellingPrice)}</td><td>{m.quantity}</td><td className="right strong">{money(m.sellingPrice*m.quantity)}</td><td><button className="icon-button danger-hover" onClick={()=>setCart(cart.filter(x=>x._id!==m._id))}><Trash2 size={16}/></button></td></tr>)}{!cart.length&&<tr><td colSpan="5"><div className="table-empty">Your sale is empty. Add an item above.</div></td></tr>}</tbody></table></div>
     </section><aside className="panel checkout-panel"><div className="panel-heading"><div><h2>Order summary</h2><p className="muted">Review before checkout</p></div></div><div className="summary-row"><span>Items</span><strong>{cart.reduce((n,m)=>n+m.quantity,0)} units</strong></div><div className="summary-row"><span>Subtotal</span><strong>{money(total)}</strong></div><div className="summary-total"><span>Total</span><strong>{money(total)}</strong></div><button className="btn primary full checkout-btn" disabled={!cart.length||busy} onClick={checkout}><ShoppingCart size={18}/>{busy?'Processing…':'Complete sale'}</button><p className="fine-print">Stock is reduced automatically when the sale is saved.</p></aside></div>
   </>;
@@ -135,9 +144,14 @@ function SalesHistory() {
 }
 
 export default function App() {
-  const [user,setUser] = useState(()=>{try{return JSON.parse(localStorage.getItem('pharmacy_user')||'null')}catch{return null}});
+  const [user,setUser] = useState(()=>{if(!localStorage.getItem('pharmacy_token'))return null;try{return JSON.parse(localStorage.getItem('pharmacy_user')||'null')}catch{return null}});
   const navigate=useNavigate();
   const logout=()=>{localStorage.removeItem('pharmacy_token');localStorage.removeItem('pharmacy_user');setUser(null);navigate('/');};
+  useEffect(()=>{
+    const handleUnauthorized=()=>{setUser(null);navigate('/',{replace:true});};
+    window.addEventListener('pharmacy:unauthorized',handleUnauthorized);
+    return()=>window.removeEventListener('pharmacy:unauthorized',handleUnauthorized);
+  },[navigate]);
   if(!user) return <AuthPage onLogin={u=>{setUser(u);navigate('/');}}/>;
   return <Shell user={user} onLogout={logout}><Routes><Route path="/" element={<Dashboard/>}/><Route path="/medicines" element={<Medicines/>}/><Route path="/sales/new" element={<NewSale/>}/><Route path="/sales" element={<SalesHistory/>}/><Route path="*" element={<Navigate to="/" replace/>}/></Routes></Shell>;
 }
